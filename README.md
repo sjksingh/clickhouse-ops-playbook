@@ -5,7 +5,7 @@ Field-tested ClickHouse operations guide — practical SQLs, scripts, and runboo
 This repository collects real-world troubleshooting patterns, scripts, and observability queries for managing ClickHouse at scale — from readonly recovery to detached parts cleanup, background merge tuning, and compression verification.
 
 ---
-
+```
 ## 📁 Repository Structure
 clickhouse-ops-playbook/
 ├── README.md
@@ -22,7 +22,7 @@ clickhouse-ops-playbook/
 ├── newrelic_alerts.md
 ├── metrics.md
 └── dashboards/
-
+```
 ---
 
 ## 🚀 Quick Start
