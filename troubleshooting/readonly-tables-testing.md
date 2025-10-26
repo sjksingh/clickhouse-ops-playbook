@@ -45,13 +45,6 @@ ORDER BY id
 SETTINGS storage_policy = 'standardv2', index_granularity = 8192;
 ```
 
-**Expected output:**
-```
-┌─host─────────────────────────────────────────┬─port─┬─status─┬─error─┐
-│ chi-ch-observations-nvme-observations-ls-0-0 │ 9000 │      0 │       │
-│ chi-ch-observations-nvme-observations-ls-0-1 │ 9000 │      0 │       │
-└──────────────────────────────────────────────┴──────┴────────┴───────┘
-```
 
 ### Step 2: Insert Test Data
 
@@ -109,10 +102,6 @@ WHERE database = 'ssc_dbre'
 ### Execute Test
 
 **Connect to replica 0-0 ONLY:**
-```bash
-kubectl exec -n ch-observations-nvme -it \
-  chi-ch-observations-nvme-observations-ls-0-0-0 -- clickhouse-client
-```
 
 **Drop table (local only - DO NOT use ON CLUSTER):**
 ```sql
@@ -169,15 +158,6 @@ INSERT INTO ssc_dbre.test_readonly VALUES (9999, 'fail_test', now());
 DB::Exception: Table is in readonly mode. (TABLE_IS_READ_ONLY)
 ```
 
-### Recovery
-
-**Option A: Restart replica 0-1**
-```bash
-kubectl rollout restart statefulset/chi-ch-observations-nvme-observations-ls-0-1 \
-  -n ch-observations-nvme
-```
-
-**Expected:** Still readonly after restart (ZK path is gone)
 
 **Option B: Recreate table on 0-0**
 ```bash
@@ -541,7 +521,3 @@ After completing these tests, refer to:
 **[readonly-tables.md](readonly-tables.md)** - Production troubleshooting guide
 
 ---
-
-**Document Version**: 1.0  
-**Last Updated**: October 2025  
-**Maintained By**: DBRE Team
