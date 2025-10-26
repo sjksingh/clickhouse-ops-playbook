@@ -1,9 +1,6 @@
 # Readonly Tables - Testing & Validation Guide
 
 **Purpose**: Test and validate readonly replica scenarios in dev/staging  
-**Cluster**: `platform-v2-demo-us-east-1`  
-**Namespace**: `ch-observations-nvme`
-
 ---
 
 ## ⚠️ SAFETY WARNING
