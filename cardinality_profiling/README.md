@@ -12,5 +12,3 @@ for ClickHouse tables. Cardinality % helps assess:
 
 1. Generate the cardinality query using `generate_cardinality_query.sql`
 2. Execute the query to get raw counts (`uniq(column)` + `count()`)
-3. Calculate cardinality % using `calculate_cardinality_percent.sql`
-4. Review results in `sample_results.csv`
