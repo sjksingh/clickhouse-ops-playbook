@@ -525,6 +525,7 @@ kubectl rollout restart statefulset clickhouse
 - System tables reference: https://clickhouse.com/docs/en/operations/system-tables
 - Performance optimization: https://clickhouse.com/docs/en/operations/optimizing-performance
 - MerTree Settings: https://chistadata.com/mergetree-settings-clickhouse-performance/
+- Monitoring Merge Queues - https://chistadata.com/monitoring-merge-queues-in-clickhouse/
 
 ---
 
