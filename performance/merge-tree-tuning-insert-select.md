@@ -528,6 +528,3 @@ kubectl rollout restart statefulset clickhouse
 
 ---
 
-**Last Updated**: Based on ClickHouse best practices as of December 2024
-**Maintained by**: Platform DBRE Team
-**Questions?**: #dbre-oncall Slack channel
