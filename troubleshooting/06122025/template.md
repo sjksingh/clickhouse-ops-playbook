@@ -26,6 +26,7 @@ fi
 
 # Step 2: Generate and execute attachment commands for parts with empty reason
 echo "Attaching parts with empty reason..."
+...bash
 clickhouse-client --host=$CLICKHOUSE_HOST --port=$CLICKHOUSE_PORT -q "
 SELECT 'ALTER TABLE $DATABASE.$TABLE ATTACH PART \\''||name||'\\';'
 FROM system.detached_parts
@@ -37,7 +38,7 @@ FORMAT TSVRaw" | while read -r CMD; do
     # Sleep briefly to prevent overwhelming the server
     sleep 0.5
 done
-
+...
 # Step 3: Verify read-only status and fix if needed
 READONLY_COUNT=$(clickhouse-client --host=$CLICKHOUSE_HOST --port=$CLICKHOUSE_PORT -q "
 SELECT count() FROM system.replicas 
