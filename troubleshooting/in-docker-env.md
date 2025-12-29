@@ -1,4 +1,4 @@
-# Runbook: ClickHouse Table Read-Only Recovery (P0)
+# Runbook: ClickHouse Table Read-Only Recovery
 
 
 ### Why do tables go Read-Only?
