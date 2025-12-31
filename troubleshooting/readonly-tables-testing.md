@@ -61,13 +61,11 @@ FROM numbers(1000);
 ### Step 3: Verify Replication
 
 ```sql
-SELECT 
-    hostName() AS host,
-    count(*) AS row_count,
-    count(DISTINCT partition) AS partitions
+SELECT
+    hostName() AS hst,
+    count(1)
 FROM clusterAllReplicas('{cluster}', ssc_dbre, test_readonly)
-GROUP BY hostName()
-ORDER BY host;
+GROUP BY hst;
 ```
 
 **Expected:** Both replicas show 1000 rows
@@ -75,16 +73,16 @@ ORDER BY host;
 ### Step 4: Check Healthy State
 
 ```sql
-SELECT 
-    hostName() AS host,
+SELECT
+    database,
+    `table`,
+    replica_name,
+    is_leader,
     is_readonly,
-    total_replicas,
-    active_replicas,
-    absolute_delay,
-    queue_size
+    replica_is_active,
+    zookeeper_path
 FROM clusterAllReplicas('{cluster}', system, replicas)
-WHERE database = 'ssc_dbre' 
-  AND table = 'test_readonly';
+WHERE `table` = 'test_readonly'
 ```
 
 **Expected:**
@@ -97,7 +95,7 @@ WHERE database = 'ssc_dbre'
 
 ## Scenario 1: ZK Path Deletion
 
-**Simulates:** Accidental DROP TABLE on one replica (most common readonly cause)
+**Simulates:** Accidental DROP replica metadata - on one replica (most common readonly cause)
 
 ### Execute Test
 
@@ -105,40 +103,44 @@ WHERE database = 'ssc_dbre'
 
 **Drop table (local only - DO NOT use ON CLUSTER):**
 ```sql
-DROP TABLE ssc_dbre.test_readonly;
+DETACH table ssc_dbre.test_readonly;
+SELECT 
+     'SYSTEM DROP REPLICA \''||replica_name||'\' FROM ZKPATH \''||zookeeper_path||'\'; ' FROM  system.replicas
+WHERE 
+    database = 'ssc_dbre' AND  table = 'test_readonly' AND is_readonly
+FORMAT TSVRaw;
+
+ATTCH table ssc_dbre.test_readonly;
 ```
 
-### Expected Behavior
+### Verify Readonly State
+```sql
+SELECT
+    database,
+    `table`,
+    replica_name,
+    is_leader,
+    is_readonly,
+    replica_is_active,
+    zookeeper_path
+FROM clusterAllReplicas('{cluster}', system, replicas)
+WHERE `table` = 'test_readonly'
 
-**Replica 0-0:**
-- Table gone completely
-- No errors
+Query id: 5b0819f6-a2e4-4330-84e4-bf0f35fa4126
+
+   ┌─database─┬─table─────────┬─replica_name─┬─is_leader─┬─is_readonly─┬─replica_is_active──┬─zookeeper_path─────────────────────────────────────────────┐
+1. │ ssc_dbre │ test_readonly │ clickhouse01 │         1 │           0 │ {'clickhouse01':1} │ /clickhouse/tables/15784b18-a595-4909-8d06-35aebb8fde22/01 │
+2. │ ssc_dbre │ test_readonly │ clickhouse02 │         0 │           1 │ {}                 │ /clickhouse/tables/15784b18-a595-4909-8d06-35aebb8fde22/01 │
+   └──────────┴───────────────┴──────────────┴───────────┴─────────────┴────────────────────┴────────────────────────────────────────────────────────────┘
+
+2 rows in set. Elapsed: 0.012 sec.
+```
 
 **Replica 0-1:**
 - Table exists but `is_readonly = 1`
 - `zookeeper_exception`: "No node /clickhouse/tables/.../log"
 - Inserts will fail with "Table is in readonly mode"
 
-### Verify Readonly State
-
-```sql
--- Run on replica 0-1 or via clusterAllReplicas
-SELECT 
-    hostName() AS host,
-    is_readonly,
-    zookeeper_exception,
-    active_replicas
-FROM clusterAllReplicas('{cluster}', system, replicas)
-WHERE database = 'ssc_dbre' 
-  AND table = 'test_readonly';
-```
-
-**Expected output:**
-```
-┌─host─────────────────────────────────────────┬─is_readonly─┬─zookeeper_exception──────────┬─active_replicas─┐
-│ chi-ch-observations-nvme-observations-ls-0-1 │           1 │ No node /clickhouse/tables/... │               1 │
-└──────────────────────────────────────────────┴─────────────┴──────────────────────────────┴─────────────────┘
-```
 
 ### Test Insert Failure
 
@@ -157,6 +159,43 @@ INSERT INTO ssc_dbre.test_readonly VALUES (9999, 'fail_test', now());
 ```
 DB::Exception: Table is in readonly mode. (TABLE_IS_READ_ONLY)
 ```
+
+
+### Fix. 
+
+Login to the broken pod...
+
+```sql
+SELECT concat('SYSTEM RESTORE REPLICA `', database, '`.`', `table`, '`; ')
+FROM system.replicas
+WHERE (database = 'ssc_dbre') AND (`table` = 'test_readonly') AND is_readonly
+FORMAT TSVRaw
+
+SYSTEM RESTORE REPLICA ssc_dbre.test_readonly
+
+SELECT
+    database,
+    `table`,
+    replica_name,
+    is_leader,
+    is_readonly,
+    replica_is_active,
+    zookeeper_path
+FROM clusterAllReplicas('{cluster}', system, replicas)
+WHERE `table` = 'test_readonly'
+
+Query id: 4b683e1e-937e-4244-9fcd-9c917fbc6c9a
+
+   ┌─database─┬─table─────────┬─replica_name─┬─is_leader─┬─is_readonly─┬─replica_is_active───────────────────┬─zookeeper_path─────────────────────────────────────────────┐
+1. │ ssc_dbre │ test_readonly │ clickhouse01 │         1 │           0 │ {'clickhouse01':1,'clickhouse02':1} │ /clickhouse/tables/15784b18-a595-4909-8d06-35aebb8fde22/01 │
+2. │ ssc_dbre │ test_readonly │ clickhouse02 │         1 │           0 │ {'clickhouse01':1,'clickhouse02':1} │ /clickhouse/tables/15784b18-a595-4909-8d06-35aebb8fde22/01 │
+   └──────────┴───────────────┴──────────────┴───────────┴─────────────┴─────────────────────────────────────┴────────────────────────────────────────────────────────────┘
+
+
+```
+
+## Scenario 2: Accidental DROP TABLE on one replica (most common readonly cause)
+
 
 
 **Option B: Recreate table on 0-0**
