@@ -4,7 +4,7 @@
 CLICKHOUSE_HOST="localhost"
 CLICKHOUSE_PORT="8123"
 DATABASE="issues"
-TABLE="scorecard_issue_active"
+TABLE="active_issue"
 
 echo "Starting recovery for $DATABASE.$TABLE"
 
