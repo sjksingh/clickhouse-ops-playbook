@@ -101,7 +101,7 @@ WHERE `table` = 'test_readonly'
 
 **Connect to replica 0-0 ONLY:**
 
-**Drop table (local only - DO NOT use ON CLUSTER):**
+
 ```sql
 DETACH table ssc_dbre.test_readonly;
 SELECT 
@@ -196,27 +196,48 @@ Query id: 4b683e1e-937e-4244-9fcd-9c917fbc6c9a
 
 ## Scenario 2: Accidental DROP TABLE on one replica (most common readonly cause)
 
+**Drop table (local only - DO NOT use ON CLUSTER):**
+
 
 
 **Option B: Recreate table on 0-0**
-```bash
+```sql
 # Connect to 0-0
-kubectl exec -n ch-observations-nvme -it \
-  chi-ch-observations-nvme-observations-ls-0-0-0 -- clickhouse-client
-
-# Recreate table
-CREATE TABLE ssc_dbre.test_readonly
-(
-    id Int32,
-    value String,
-    timestamp DateTime
-)
-ENGINE = ReplicatedMergeTree('/clickhouse/tables/<UUID>/<SHARD>', '{replica}')
-PARTITION BY toYYYYMM(timestamp)
-ORDER BY id;
+DROP TABLE ssc_dbre.test_readonly sync;
 ```
 
-**Note:** Data will NOT sync automatically. Use SYSTEM RESTORE REPLICA on 0-0.
+Goto health POD and get the table-DDL 
+```sql
+SELECT concat(create_table_query, ';')
+FROM system.tables
+WHERE (database = 'ssc_dbre') AND (`table` = 'test_readonly')
+SETTINGS show_table_uuid_in_table_create_query_if_not_nil = 1
+FORMAT TSVRaw
+```
+
+Back to broken pod...
+```
+CREATE TABLE ssc_dbre.test_readonly UUID '15784b18-a595-4909-8d06-35aebb8fde22' (`id` Int32, `value` String, `timestamp` DateTime) ENGINE = ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') PARTITION BY toYYYYMM(timestamp) ORDER BY id SETTINGS storage_policy = 'standardv2', index_granularity = 8192;
+```
+
+Replication will take care of the rest...
+```sql
+SELECT
+    hostName() AS hst,
+    count(1)
+FROM clusterAllReplicas('{cluster}', ssc_dbre, test_readonly)
+GROUP BY hst
+
+Query id: 0a5801e9-5fde-4cae-94ef-72fd23c0f2e9
+
+   ┌─hst──────────┬─count(1)─┐
+1. │ clickhouse01 │     1010 │
+2. │ clickhouse02 │     1010 │
+   └──────────────┴──────────┘
+
+2 rows in set. Elapsed: 0.008 sec.
+```
+
 
 ---
 
