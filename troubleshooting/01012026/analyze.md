@@ -1,5 +1,5 @@
 # ClickHouse OLAP Performance Playbook
-**From Reactive to Proactive: A Platform Engineer's Guide**
+**From Reactive to Proactive: A Platform DBRE Guide**
 
 ---
 
@@ -29,12 +29,13 @@ SYMPTOM → ROOT CAUSE → RUNBOOK
 - `peak_memory > 2GB`
 - Query killed with "Memory limit exceeded"
 - System memory exhaustion
+- Consistent 2GB+ usage on same query
 
 **Root Causes:**
-1. Large GROUP BY on high-cardinality columns
-2. Inefficient aggregation functions
-3. Missing LIMIT on aggregations
-4. Cartesian JOIN products
+1. Large GROUP BY on high-cardinality columns (observation_group_key, asset_key)
+2. Over-fetching: scanning 30GB+ to return <1MB of results
+3. Multiple groupUniqArray() aggregations
+4. Window functions (count() OVER ()) on massive datasets
 
 **Immediate Actions (5 min):**
 
@@ -42,13 +43,23 @@ SYMPTOM → ROOT CAUSE → RUNBOOK
 # 1. Identify the offending query hash
 ./pv2-top-slow-queries.sh | grep "Memory-heavy"
 
-# 2. Kill if still running
-ch_query "KILL QUERY WHERE query_id = 'xxx'"
+# 2. Check current memory usage vs available
+ch_query "
+SELECT 
+  formatReadableSize(sum(memory_usage)) AS current_memory,
+  formatReadableSize(value::UInt64) AS max_allowed
+FROM system.processes, system.settings
+WHERE name = 'max_memory_usage'
+"
 
-# 3. Check memory settings
-ch_query "SELECT name, value FROM system.settings 
-          WHERE name LIKE '%memory%' 
-          AND name IN ('max_memory_usage', 'max_bytes_before_external_group_by')"
+# 3. Kill if approaching limit (>80% memory)
+ch_query "
+SELECT query_id, user, formatReadableSize(memory_usage) AS mem
+FROM system.processes 
+WHERE memory_usage > 1.6e9  -- 80% of 2GB
+ORDER BY memory_usage DESC
+"
+# Then: ch_query "KILL QUERY WHERE query_id = 'xxx'"
 ```
 
 **Short-term Fix (30 min):**
@@ -539,7 +550,7 @@ Query: BAD8B1490FD8F110
 
 ---
 
-## 💡 Principal-Level Thinking
+## 💡 High level Thinking
 
 **Staff Engineer:** "This query is slow, let me fix it"
 **Principal Engineer:** "Why is this pattern emerging? What systemic issue does this reveal?"
@@ -565,9 +576,6 @@ Query: BAD8B1490FD8F110
 - Post-mortems: Write them after every incident
 - This playbook: Iterate on it monthly
 
-**Remember:** Principal engineers aren't just faster debuggers - they're system thinkers who prevent problems before they happen.
-
+**Remember:** We aren't just faster debuggers - they're system thinkers who prevent problems before they happen.
 ---
 
-*Generated for your journey from Staff DBRE → Principal Engineer*
-*Update this playbook as you learn. Make it yours.* 🚀
