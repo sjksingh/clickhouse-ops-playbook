@@ -91,3 +91,45 @@ Use the following logic to decide when to use LowCardinality(String):
 - Cardinality < 5%: 🚀 Strong Yes. Significant storage and query speed gains.
 - Cardinality 5% - 50%: ⚖️ Maybe. Usually better to use standard String with CODEC(LZ4).
 - Cardinality > 50%: 🛑 No. Dictionary overhead will make the table larger and slower.
+
+
+### 💎 Expanded Datatype Optimization Guide
+
+🔢 Integers: Smallest is Best
+Unlike Postgres where bigint is often the default "safe" choice, ClickHouse performance depends on memory bandwidth.
+
+- Rule: Always use the smallest UInt or Int that fits your data.
+- Ref: UInt8 (0-255), UInt16 (0-65k), UInt32 (0-4.2B), UInt64.
+- Action: ALTER TABLE db.tbl MODIFY COLUMN id UInt32 (Safe if upcasting).
+
+🏷 Enums: The "Manual" LowCardinality
+If your set of strings is fixed and small (e.g., Statuses, Severities, Types), Enums are faster than LowCardinality.
+- Impact: Stored as 1-byte (Enum8) or 2-bytes (Enum16).
+- PG Equivalent: Similar to CREATE TYPE ... AS ENUM.
+- Logic: Use for < 255 stable values. Use LowCardinality for dynamic values (like Domains).
+
+🕒 Date & DateTime: Avoid Strings
+Never store timestamps as Strings. ClickHouse has specialized types that are extremely compressed.
+
+- Date: 2 bytes. (e.g., 2023-01-01)
+- DateTime: 4 bytes. (Second precision)
+- DateTime64(3): 8 bytes. (Millisecond precision)
+- Tip: If you only query by day, adding a redundant Date column to your ORDER BY can speed up range scans by 10x.
+
+🆔 UUIDs: Don't use String
+- Bad: String (36 bytes + length overhead).
+- Good: UUID (Fixed 16-byte binary).
+- Optimization: ALTER TABLE db.tbl MODIFY COLUMN user_id UUID.
+
+🗜 Codecs: Beyond LZ4
+Every column can have a specialized compression algorithm.
+
+- Delta, LZ4: Perfect for sequences (IDs, Timestamps). It stores the difference between values.
+- DoubleDelta, LZ4: Best for time-series data.
+- ZSTD(N): Better compression than LZ4 but slower. Use for large text blobs or JSON strings.
+- Reference: ALTER TABLE db.tbl MODIFY COLUMN logs String CODEC(ZSTD(3))
+  
+"Don't": Nullables
+In Postgres, NULL is nearly free (1 bit in the null bitmap). In ClickHouse, Nullable(T) creates a separate hidden file for the null mask.
+- Performance Impact: Every read now has to open two files instead of one.
+- Use "Sentinel Values" instead (e.g., 0 for an empty ID, '' for an empty string, or 1970-01-01 for an empty date) unless the business logic strictly requires NULL.
