@@ -38,7 +38,7 @@ ClickHouse is an OLAP database. Unlike PostgreSQL, which is row-oriented and use
 
 ---
 
-## 🔄 Optimal Backfill Strategy (The "Staff Level" Way)
+## 🔄 Optimal Backfill Strategy
 When you must change the "DNA" (Sort Key or Partition) of a multi-terabyte table, do not use `INSERT INTO ... SELECT` in one go. Use the **Atomic Swap** method to ensure zero downtime and resumeability.
 
 ### 1. Create the Shadow Table
@@ -74,4 +74,20 @@ Swap the tables instantly. This is a metadata-only operation.
 EXCHANGE TABLES db.table_old AND db.table_new;
 ```
 
+### 🚀 Operational Checklist for Mutations
+- Check Mutation Queue: Never start an ALTER if the queue is backed up.
+```sql
+SELECT table, command, is_done FROM system.mutations WHERE is_done = 0;
+```
+- Verify Disk Space: Mutations require temp space. Ensure at least 20% free disk before modifying large columns.
+- Monitor Merges: If system.merges is saturated, your ALTER will be slow.
+- The Sampling Rule: Never run cardinality checks on TiB-scale tables without sampling.
+- Safe Check: SELECT count() FROM table SAMPLE 0.01
 
+
+### 📊 Cardinality Optimization Guide
+Use the following logic to decide when to use LowCardinality(String):
+
+- Cardinality < 5%: 🚀 Strong Yes. Significant storage and query speed gains.
+- Cardinality 5% - 50%: ⚖️ Maybe. Usually better to use standard String with CODEC(LZ4).
+- Cardinality > 50%: 🛑 No. Dictionary overhead will make the table larger and slower.
