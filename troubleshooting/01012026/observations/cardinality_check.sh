@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Usge cardinality_check.sh observations.observations
 source ch_login.sh || { echo "❌ missing ch_login.sh"; exit 1; }
 
 # Get table from argument or use default
