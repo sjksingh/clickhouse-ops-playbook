@@ -537,6 +537,3 @@ Reads from observations_in (source table)
 Writes to measurement_id_reverse_lookup_3_pass_thru (destination)
 Processes data in 1-hour intervals with 5-minute lookback
 Uses 100 partitions (cityHash64 % 100)
-
-
-Ready to implement the fix?
