@@ -2,18 +2,15 @@
 # Usge cardinality_check.sh observations.observations
 source ch_login.sh || { echo "❌ missing ch_login.sh"; exit 1; }
 
-# Get table from argument or use default
-TABLE="${1:-observations.issue_severity}"
-
-# Extract DB and Table names
+TABLE="${1:-observations.observations}"
 DB_NAME=$(echo $TABLE | awk -F. '{if (NF>1) print $1; else print "default"}')
 TBL_NAME=$(echo $TABLE | awk -F. '{if (NF>1) print $2; else print $1}')
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔍 DYNAMIC ANALYSIS: $TABLE"
+echo "🔍 SMART CARDINALITY ANALYSIS: $TABLE"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Fetch columns: format as CSV to avoid alignment issues, then strip quotes and header
+# Fetch String/LowCardinality columns
 COLUMNS=$(ch_query "
     SELECT name 
     FROM system.columns 
@@ -24,35 +21,56 @@ COLUMNS=$(ch_query "
 " | grep -v "^name$" | xargs)
 
 if [ -z "$COLUMNS" ]; then
-    echo "ℹ️ No String columns found in $TABLE to analyze."
+    echo "ℹ️ No String columns found."
 else
     for COL in $COLUMNS; do
-        echo "📊 Analyzing Column: $COL..."
-        ch_query "
-        SELECT
-            '$COL' AS column_name,
-            count() AS total_rows,
-            uniqExact(\"$COL\") AS unique_values,
-            round(unique_values / total_rows * 100, 2) AS cardinality_pct,
-            round(avg(length(\"$COL\")), 1) AS avg_length,
-            any(\"$COL\") AS sample_1
-        FROM $TABLE
-        FORMAT Vertical
-        "
+        echo "📊 Analyzing: $COL..."
+        
+        # Get stats into variables
+        RESULT=$(ch_query "
+            SELECT 
+                count(), 
+                uniqExact(\"$COL\"), 
+                round(uniqExact(\"$COL\") / count() * 100, 2),
+                round(avg(length(\"$COL\")), 1),
+                any(\"$COL\")
+            FROM $TABLE 
+            FORMAT TabSeparated" | tr -d '\r')
+
+        # Parse result line
+        TOTAL_ROWS=$(echo $RESULT | awk '{print $1}')
+        UNIQ_VALS=$(echo $RESULT | awk '{print $2}')
+        CARD_PCT=$(echo $RESULT | awk '{print $3}')
+        AVG_LEN=$(echo $RESULT | awk '{print $4}')
+        SAMPLE=$(echo $RESULT | cut -d' ' -f5-)
+
+        # Logic for Emojis
+        STATUS="✅ OK"
+        ADVICE="Keep as is."
+        
+        if (( $(echo "$CARD_PCT < 5.0" | bc -l) )); then
+            STATUS="🚀 OPTIMIZE"
+            ADVICE="Convert to LowCardinality(String) for HUGE savings!"
+        fi
+
+        if (( $(echo "$CARD_PCT > 60.0" | bc -l) )); then
+            STATUS="🛑 SKIP"
+            ADVICE="High cardinality. LowCardinality would hurt performance."
+        fi
+
+        # Output formatting
+        echo "   Status:      $STATUS"
+        echo "   Recommendation: $ADVICE"
+        echo "   Total Rows:  $TOTAL_ROWS"
+        echo "   Unique:      $UNIQ_VALS ($CARD_PCT%)"
+        echo "   Avg Length:  $AVG_LEN bytes"
+        echo "   Sample:      $SAMPLE"
         echo "-----------------------------------------------"
     done
 fi
 
-echo "📋 Metadata for Non-String Columns (Enums/Integers):"
-ch_query "
-    SELECT name, type 
-    FROM system.columns 
-    WHERE database = '$DB_NAME' 
-      AND table = '$TBL_NAME' 
-      AND type NOT LIKE 'String' AND type NOT LIKE 'LowCardinality%'
-    FORMAT TabSeparated
-"
-echo ""
+echo "📋 Non-String Columns (Already Efficient):"
+ch_query "SELECT name, type FROM system.columns WHERE database='$DB_NAME' AND table='$TBL_NAME' AND type NOT LIKE 'String%' AND type NOT LIKE 'LowCardinality%' FORMAT TabSeparated"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎯 INTERPRETATION GUIDE"
