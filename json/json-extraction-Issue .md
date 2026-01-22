@@ -497,7 +497,7 @@ Have the Kafka connector/SMT flatten the breach_items into a separate table with
 
 ---
 
-## Questions Priyanka Might Ask
+## Questions 
 
 ### Q1: "Why did malware and appsec work but breach didn't?"
 **A:** Malware and appsec are likely **shallower** in the JSON hierarchy or the paths are **shorter**. The issue manifests more with deeper nesting (3+ levels). Also, check if those actually work - they might have the same issue that wasn't noticed yet.
